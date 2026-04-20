@@ -39,7 +39,7 @@ const MovieDetail = () => {
         <ListGroup>
           <ListGroupItem>{selectedMovie.title}</ListGroupItem>
           <ListGroupItem>
-            {selectedMovie.actors.map((actor, i) => (
+            {(selectedMovie.actors || []).map((actor, i) => (
               <p key={i}>
                 <b>{actor.actorName}</b> {actor.characterName}
               </p>
@@ -52,7 +52,7 @@ const MovieDetail = () => {
           </ListGroupItem>
         </ListGroup>
         <Card.Body className="card-body bg-white">
-          {selectedMovie.reviews.map((review, i) => (
+          {(selectedMovie.movieReviews || []).map((review, i) => (
             <p key={i}>
               <b>{review.username}</b>&nbsp; {review.review} &nbsp; <BsStarFill />{' '}
               {review.rating}
