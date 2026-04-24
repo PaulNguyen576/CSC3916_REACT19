@@ -21,6 +21,28 @@ const movieReducer = (state = initialState, action) => {
             updated['selectedMovie'] = action.selectedMovie;
             return updated;
         case constants.SUBMIT_REVIEW:
+            if (!updated.selectedMovie || !action.review) {
+                return updated;
+            }
+
+            const existingReviews = Array.isArray(updated.selectedMovie.movieReviews)
+                ? updated.selectedMovie.movieReviews
+                : [];
+            const movieReviews = [action.review, ...existingReviews];
+            const numericRatings = movieReviews
+                .map((r) => Number(r.rating))
+                .filter((r) => !Number.isNaN(r));
+
+            const avgRating = numericRatings.length
+                ? numericRatings.reduce((sum, r) => sum + r, 0) / numericRatings.length
+                : updated.selectedMovie.avgRating;
+
+            updated['selectedMovie'] = {
+                ...updated.selectedMovie,
+                movieReviews,
+                avgRating
+            };
+
             return updated;
         case constants.SEARCH_MOVIES:
             updated['searchResults'] = action.movies;

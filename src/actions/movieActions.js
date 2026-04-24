@@ -45,6 +45,15 @@ function fetchWithAuthFallback(url, options = {}) {
     });
 }
 
+function parseMoviesPayload(res) {
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.movies)) return res.movies;
+    if (Array.isArray(res?.results)) return res.results;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.movieList)) return res.movieList;
+    return [];
+}
+
 function moviesFetched(movies) {
     return {
         type: actionTypes.FETCH_MOVIES,
@@ -66,9 +75,10 @@ function movieSet(movie) {
     }
 }
 
-function reviewSubmitted() {
+function reviewSubmitted(review) {
     return {
-        type: actionTypes.SUBMIT_REVIEW
+        type: actionTypes.SUBMIT_REVIEW,
+        review
     }
 }
 
@@ -106,13 +116,20 @@ export function fetchMovies() {
             if (!response.ok) throw Error(response.statusText);
             return response.json();
         }).then((res) => {
-            dispatch(moviesFetched(res.movies || res || []));
+            dispatch(moviesFetched(parseMoviesPayload(res)));
         }).catch((e) => console.log(e));
     }
 }
 
 export function submitReview(movieId, review, rating) {
     return dispatch => {
+        const optimisticReview = {
+            username: localStorage.getItem('username') || 'You',
+            rating,
+            review
+        };
+        dispatch(reviewSubmitted(optimisticReview));
+
         return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/reviews`, {
             method: 'POST',
             body: JSON.stringify({ movieId, review, rating })
@@ -120,7 +137,6 @@ export function submitReview(movieId, review, rating) {
             if (!response.ok) throw Error(response.statusText);
             return response.json();
         }).then(() => {
-            dispatch(reviewSubmitted());
             dispatch(fetchMovie(movieId)); // refresh movie to show new review
         }).catch((e) => console.log(e));
     }
@@ -128,14 +144,39 @@ export function submitReview(movieId, review, rating) {
 
 export function searchMovies(searchData) {
     return dispatch => {
-        return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/search`, {
+        const title = (searchData.title || '').trim();
+        const actorName = (searchData.actorName || '').trim();
+        const payload = {
+            title,
+            actorName,
+            movieTitle: title,
+            actor: actorName,
+            query: `${title} ${actorName}`.trim()
+        };
+
+        const postSearch = (url) => fetchWithAuthFallback(url, {
             method: 'POST',
-            body: JSON.stringify(searchData)
-        }).then((response) => {
-            if (!response.ok) throw Error(response.statusText);
-            return response.json();
-        }).then((res) => {
-            dispatch(moviesSearched(res.movies || res || []));
-        }).catch((e) => console.log(e));
+            body: JSON.stringify(payload)
+        });
+
+        return postSearch(`${env.REACT_APP_API_URL}/search`)
+            .then((response) => {
+                if (!response.ok) {
+                    // Common alternative route used in many assignments.
+                    return postSearch(`${env.REACT_APP_API_URL}/movies/search`);
+                }
+                return response;
+            })
+            .then((response) => {
+                if (!response.ok) throw Error(response.statusText);
+                return response.json();
+            })
+            .then((res) => {
+                dispatch(moviesSearched(parseMoviesPayload(res)));
+            })
+            .catch((e) => {
+                console.log(e);
+                dispatch(moviesSearched([]));
+            });
     }
 }
