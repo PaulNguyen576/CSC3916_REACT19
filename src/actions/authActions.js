@@ -17,25 +17,48 @@ function logout() {
 
 export function submitLogin(data) {
     return dispatch => {
-        return fetch(`${env.REACT_APP_API_URL}/signin`, {
+        const username = (data.username || '').trim();
+        const password = data.password;
+
+        const signin = (payload) => fetch(`${env.REACT_APP_API_URL}/signin`, {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data),
+            body: JSON.stringify(payload),
             mode: 'cors'
-        }).then((response) => {
-            if (!response.ok) {
-                throw Error(response.statusText);
-            }
-            return response.json()
-        }).then((res) => {
-            localStorage.setItem('username', data.username);
-            localStorage.setItem('token', res.token);
+        });
 
-            dispatch(userLoggedIn(data.username));
-        }).catch((e) => console.log(e));
+        const parseAndLogin = (response) => {
+            if (!response.ok) {
+                throw Error(`Sign in failed (${response.status})`);
+            }
+            return response.json();
+        };
+
+        return signin({ username, password })
+            .catch((err) => {
+                // Some backends use "email" instead of "username".
+                return signin({ email: username, password }).catch(() => {
+                    throw err;
+                });
+            })
+            .then(parseAndLogin)
+            .then((res) => {
+                const token = res.token || res.accessToken || res.jwt || res.jwtToken;
+                if (!token) {
+                    throw Error('Sign in response did not include a token.');
+                }
+
+                localStorage.setItem('username', username);
+                localStorage.setItem('token', token);
+                dispatch(userLoggedIn(username));
+            })
+            .catch((e) => {
+                console.log(e);
+                alert('Unable to sign in. Please verify your credentials and try again.');
+            });
     }
 }
 

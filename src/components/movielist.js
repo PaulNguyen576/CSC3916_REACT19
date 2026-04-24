@@ -5,6 +5,32 @@ import { Link } from 'react-router-dom';
 import { Image, Nav, Carousel, Form, Button, Card, Row, Col } from 'react-bootstrap';
 import { BsStarFill } from 'react-icons/bs';
 
+function getAverageRating(movie) {
+    if (!movie) {
+        return null;
+    }
+
+    const directAverage = Number(movie.avgRating);
+    if (!Number.isNaN(directAverage)) {
+        return directAverage;
+    }
+
+    const reviews = Array.isArray(movie.movieReviews) ? movie.movieReviews : [];
+    if (!reviews.length) {
+        return null;
+    }
+
+    const numericRatings = reviews
+        .map((r) => Number(r.rating))
+        .filter((r) => !Number.isNaN(r));
+
+    if (!numericRatings.length) {
+        return null;
+    }
+
+    return numericRatings.reduce((sum, r) => sum + r, 0) / numericRatings.length;
+}
+
 function MovieList() {
     const dispatch = useDispatch();
     const movies = useSelector(state => state.movie.movies);
@@ -68,7 +94,7 @@ function MovieList() {
                         </Nav.Link>
                         <Carousel.Caption>
                             <h3>{movie.title}</h3>
-                            <BsStarFill color="gold" /> {movie.avgRating ? movie.avgRating.toFixed(1) : 'N/A'} &nbsp;&nbsp; {movie.releaseDate}
+                            <BsStarFill color="gold" /> {getAverageRating(movie) !== null ? getAverageRating(movie).toFixed(1) : 'N/A'} &nbsp;&nbsp; {movie.releaseDate}
                         </Carousel.Caption>
                     </Carousel.Item>
                 ))}
@@ -128,7 +154,7 @@ function MovieList() {
                                         <Card.Body>
                                             <Card.Title>{movie.title}</Card.Title>
                                             <Card.Text>
-                                                <BsStarFill color="gold" /> {movie.avgRating ? movie.avgRating.toFixed(1) : 'N/A'} &nbsp; {movie.releaseDate}
+                                                <BsStarFill color="gold" /> {getAverageRating(movie) !== null ? getAverageRating(movie).toFixed(1) : 'N/A'} &nbsp; {movie.releaseDate}
                                             </Card.Text>
                                             <Nav.Link
                                                 as={Link}

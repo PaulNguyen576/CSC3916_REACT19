@@ -1,9 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { fetchMovie, submitReview } from '../actions/movieActions';
 import { useDispatch, useSelector } from 'react-redux';
 import { Card, ListGroup, ListGroupItem, Image, Form, Button } from 'react-bootstrap';
 import { BsStarFill } from 'react-icons/bs';
 import { useParams } from 'react-router-dom';
+
+function getAverageRating(movie, reviewsOverride = null) {
+  if (!movie && !reviewsOverride) {
+    return null;
+  }
+
+  if (!reviewsOverride) {
+    const directAverage = Number(movie.avgRating);
+    if (!Number.isNaN(directAverage)) {
+      return directAverage;
+    }
+  }
+
+  const reviews = reviewsOverride ?? (Array.isArray(movie?.movieReviews) ? movie.movieReviews : []);
+  if (!reviews.length) {
+    // Fall back to backend-provided aggregate when there are no reviews in payload.
+    const directAverage = Number(movie?.avgRating);
+    if (Number.isNaN(directAverage)) {
+      return null;
+    }
+    return directAverage;
+  }
+
+  const numericRatings = reviews
+    .map((r) => Number(r.rating))
+    .filter((r) => !Number.isNaN(r));
+
+  if (!numericRatings.length) {
+    return null;
+  }
+
+  return numericRatings.reduce((sum, r) => sum + r, 0) / numericRatings.length;
+}
 
 const MovieDetail = () => {
   const dispatch = useDispatch();
@@ -13,6 +46,34 @@ const MovieDetail = () => {
   const [review, setReview] = useState('');
   const [rating, setRating] = useState(5);
   const [submitted, setSubmitted] = useState(false);
+  const [optimisticReviews, setOptimisticReviews] = useState([]);
+
+  const serverReviews = useMemo(
+    () => (Array.isArray(selectedMovie?.movieReviews) ? selectedMovie.movieReviews : []),
+    [selectedMovie]
+  );
+  const displayedReviews = useMemo(
+    () => [...optimisticReviews, ...serverReviews].filter((reviewItem, index, arr) => {
+      const reviewKey = `${reviewItem.username || ''}|${reviewItem.rating}|${reviewItem.review || ''}`;
+      return arr.findIndex((r) => `${r.username || ''}|${r.rating}|${r.review || ''}` === reviewKey) === index;
+    }),
+    [optimisticReviews, serverReviews]
+  );
+  const averageRating = getAverageRating(selectedMovie, displayedReviews);
+
+  useEffect(() => {
+    if (!serverReviews.length || !optimisticReviews.length) {
+      return;
+    }
+
+    const persisted = new Set(
+      serverReviews.map((r) => `${r.username || ''}|${r.rating}|${r.review || ''}`)
+    );
+
+    setOptimisticReviews((existing) =>
+      existing.filter((r) => !persisted.has(`${r.username || ''}|${r.rating}|${r.review || ''}`))
+    );
+  }, [serverReviews, optimisticReviews.length]);
 
   useEffect(() => {
     dispatch(fetchMovie(movieId));
@@ -20,7 +81,16 @@ const MovieDetail = () => {
 
   const handleSubmitReview = (e) => {
     e.preventDefault();
-    dispatch(submitReview(movieId, review, Number(rating)));
+    const cleanReview = review.trim();
+    const numericRating = Number(rating);
+    const optimisticReview = {
+      username: localStorage.getItem('username') || 'You',
+      rating: numericRating,
+      review: cleanReview
+    };
+
+    setOptimisticReviews((current) => [optimisticReview, ...current]);
+    dispatch(submitReview(movieId, cleanReview, numericRating));
     setReview('');
     setRating(5);
     setSubmitted(true);
@@ -54,14 +124,14 @@ const MovieDetail = () => {
         </ListGroupItem>
 
         <ListGroupItem className="bg-dark text-light">
-          <h5><BsStarFill color="gold" /> Average Rating: {selectedMovie.avgRating ? selectedMovie.avgRating.toFixed(1) : 'No ratings yet'}</h5>
+          <h5><BsStarFill color="gold" /> Average Rating: {averageRating !== null ? averageRating.toFixed(1) : 'No ratings yet'}</h5>
         </ListGroupItem>
       </ListGroup>
 
       {/* Reviews Grid */}
       <Card.Body className="bg-secondary text-light rounded mt-2">
         <h5>Reviews</h5>
-        {selectedMovie.movieReviews && selectedMovie.movieReviews.length > 0 ? (
+        {displayedReviews.length > 0 ? (
           <table className="table table-dark table-striped">
             <thead>
               <tr>
@@ -71,7 +141,7 @@ const MovieDetail = () => {
               </tr>
             </thead>
             <tbody>
-              {selectedMovie.movieReviews.map((r, i) => (
+              {displayedReviews.map((r, i) => (
                 <tr key={i}>
                   <td>{r.username}</td>
                   <td><BsStarFill color="gold" /> {r.rating}</td>

@@ -2,6 +2,49 @@ import actionTypes from '../constants/actionTypes';
 
 const env = process.env;
 
+function getAuthToken() {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        return '';
+    }
+    return token.replace(/^Bearer\s+/i, '').trim();
+}
+
+function authHeaders(useBearer = false) {
+    const token = getAuthToken();
+    return {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': useBearer ? `Bearer ${token}` : token
+    };
+}
+
+function fetchWithAuthFallback(url, options = {}) {
+    const baseOptions = {
+        ...options,
+        mode: 'cors'
+    };
+
+    return fetch(url, {
+        ...baseOptions,
+        headers: {
+            ...authHeaders(false),
+            ...(options.headers || {})
+        }
+    }).then((response) => {
+        if (response.status === 401 || response.status === 403) {
+            return fetch(url, {
+                ...baseOptions,
+                headers: {
+                    ...authHeaders(true),
+                    ...(options.headers || {})
+                }
+            });
+        }
+        return response;
+    });
+}
+
 function moviesFetched(movies) {
     return {
         type: actionTypes.FETCH_MOVIES,
@@ -44,52 +87,34 @@ export function setMovie(movie) {
 
 export function fetchMovie(movieId) {
     return dispatch => {
-        return fetch(`${env.REACT_APP_API_URL}/movies/${movieId}?reviews=true`, {
+        return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/movies/${movieId}?reviews=true`, {
             method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': localStorage.getItem('token')
-            },
-            mode: 'cors'
         }).then((response) => {
             if (!response.ok) throw Error(response.statusText);
             return response.json();
         }).then((res) => {
-            dispatch(movieFetched(res.movie));  // ← res.movie not res
+            dispatch(movieFetched(res.movie || res));
         }).catch((e) => console.log(e));
     }
 }
 
 export function fetchMovies() {
     return dispatch => {
-        return fetch(`${env.REACT_APP_API_URL}/movies?reviews=true`, {
+        return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/movies?reviews=true`, {
             method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': localStorage.getItem('token')
-            },
-            mode: 'cors'
         }).then((response) => {
             if (!response.ok) throw Error(response.statusText);
             return response.json();
         }).then((res) => {
-            dispatch(moviesFetched(res.movies));  // ← res.movies not res
+            dispatch(moviesFetched(res.movies || res || []));
         }).catch((e) => console.log(e));
     }
 }
 
 export function submitReview(movieId, review, rating) {
     return dispatch => {
-        return fetch(`${env.REACT_APP_API_URL}/reviews`, {
+        return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/reviews`, {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': localStorage.getItem('token')
-            },
-            mode: 'cors',
             body: JSON.stringify({ movieId, review, rating })
         }).then((response) => {
             if (!response.ok) throw Error(response.statusText);
@@ -103,20 +128,14 @@ export function submitReview(movieId, review, rating) {
 
 export function searchMovies(searchData) {
     return dispatch => {
-        return fetch(`${env.REACT_APP_API_URL}/search`, {
+        return fetchWithAuthFallback(`${env.REACT_APP_API_URL}/search`, {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': localStorage.getItem('token')
-            },
-            mode: 'cors',
             body: JSON.stringify(searchData)
         }).then((response) => {
             if (!response.ok) throw Error(response.statusText);
             return response.json();
         }).then((res) => {
-            dispatch(moviesSearched(res.movies));
+            dispatch(moviesSearched(res.movies || res || []));
         }).catch((e) => console.log(e));
     }
 }
